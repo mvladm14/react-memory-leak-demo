@@ -2,7 +2,10 @@
 
 A deliberately leaky React app. Vite + **React 18** + TypeScript, written with
 **functional components and hooks**. It exists to be leaked on purpose so
-memory-leak tooling has something to catch.
+memory-leak tooling has something to catch — and it's wired up to
+[`react-memory-leak-detector`](https://www.npmjs.com/package/react-memory-leak-detector)
+so the leaks report themselves live in the console (see
+[Live leak detection](#live-leak-detection)).
 
 ```bash
 npm install
@@ -66,7 +69,48 @@ Each leaky file's `useEffect` shows the exact fix as a commented-out
 `return () => { … }` cleanup. Uncommenting it (and capturing the timer id where
 noted) makes React run the cleanup on unmount and fixes that component's leak.
 
-## How to see the leak
+## Live leak detection
+
+This app is configured with
+[`react-memory-leak-detector`](https://www.npmjs.com/package/react-memory-leak-detector)
+(a dev dependency), so leaks announce themselves in the console — no heap
+snapshot needed.
+
+**How it's wired (dev-only, zero prod impact):**
+
+- `vite.config.ts` — the detector's Babel plugin runs via `@vitejs/plugin-react`'s
+  `babel.plugins`, gated to `mode === 'development'`. It tags every component/hook
+  with a heap marker and a synthetic unmount-tracking effect. `leakAgeMs: 5000`
+  means an unmounted-but-retained component is flagged 5s after it should have
+  been collected.
+- `src/main.tsx` — the runtime is dynamically imported behind `import.meta.env.DEV`,
+  so it's dead-code-eliminated from production builds (the prod bundle is byte-for-byte
+  the same as without the detector).
+- `@vitejs/plugin-react` is pinned to **v5** (Babel-based). v6 switched to Oxc and
+  has no `babel` option; v5 still supports Vite 8, so no other downgrade is needed.
+- `src/heap-tracker.d.ts` — ambient types for the package's two untyped subpath
+  exports.
+
+**Using it** — mount a leaky component, unmount it, and ~5s later:
+
+```
+[heap-leak] Suspected leak: LeakyListeners — 1 instance(s) unmounted >5s ago still retained (live 1 total)
+```
+
+The tracker lives on `window.__heapTracker`:
+
+| Call | Purpose |
+| --- | --- |
+| `window.__heapTracker.report()` | `console.table` of every tracked component (`live` vs `stale`). |
+| `window.__heapTracker.subscribe(fn)` | Forward stale-leak events anywhere (overlay, logger, Sentry). Returns an unsubscribe fn. |
+| `window.__heapTracker.sweep()` | Force an immediate leak sweep. |
+| `window.__heapTracker.configure({ … })` | Hot-update options, e.g. `configure({ logging: false })`. |
+
+> **Heads up:** `LeakyInterval`'s `console.log` fires a few times a second and — once
+> leaked — never stops, which can bury the `[heap-leak]` warnings in the console.
+> Leak a different component to see the warnings cleanly, or remove that log.
+
+## Finding it in a heap snapshot
 
 1. Open the app and mount some (or all) of the leaky components.
 2. Open Chrome DevTools → **Memory** and take a **heap snapshot** (baseline).
