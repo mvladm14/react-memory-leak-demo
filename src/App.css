@@ -1,0 +1,90 @@
+.app {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+  text-align: left;
+}
+
+.app h1 {
+  font-size: 36px;
+  margin: 0 0 12px;
+}
+
+.intro {
+  color: var(--text);
+  margin-bottom: 24px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.controls button {
+  font: inherit;
+  font-size: 15px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.controls button:hover {
+  border-color: var(--accent-border);
+}
+
+.controls button.stress {
+  color: #fff;
+  background: var(--accent);
+}
+
+.cycles {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.stage {
+  display: grid;
+  gap: 16px;
+}
+
+.leaky-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  background: var(--social-bg);
+}
+
+.leaky-card h3 {
+  margin: 0 0 8px;
+  color: var(--text-h);
+  font-size: 18px;
+}
+
+.leaky-card p {
+  margin: 4px 0;
+}
+
+.leaky-note {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.empty {
+  color: var(--text);
+  font-style: italic;
+}
+
+.hint {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  font-size: 15px;
+}
