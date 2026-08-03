@@ -3,6 +3,7 @@ import LeakyInterval from "./components/LeakyInterval";
 import LeakyTimeout from "./components/LeakyTimeout";
 import LeakyAnimationFrame from "./components/LeakyAnimationFrame";
 import LeakyListeners from "./components/LeakyListeners";
+import LeakyPromise from "./components/LeakyPromise";
 import "./App.css";
 
 type State = {
@@ -10,6 +11,7 @@ type State = {
   showTimeout: boolean;
   showRaf: boolean;
   showListeners: boolean;
+  showPromise: boolean;
   cycles: number;
 };
 
@@ -28,6 +30,7 @@ class App extends Component<object, State> {
     showTimeout: false,
     showRaf: false,
     showListeners: false,
+    showPromise: false,
     cycles: 0,
   };
 
@@ -46,12 +49,14 @@ class App extends Component<object, State> {
       showTimeout: true,
       showRaf: true,
       showListeners: true,
+      showPromise: true,
     };
     const allOff = {
       showInterval: false,
       showTimeout: false,
       showRaf: false,
       showListeners: false,
+      showPromise: false,
     };
     const step = () => {
       this.setState(allOff);
@@ -65,16 +70,22 @@ class App extends Component<object, State> {
   };
 
   render() {
-    const { showInterval, showTimeout, showRaf, showListeners, cycles } =
-      this.state;
+    const {
+      showInterval,
+      showTimeout,
+      showRaf,
+      showListeners,
+      showPromise,
+      cycles,
+    } = this.state;
     const anyMounted =
-      showInterval || showTimeout || showRaf || showListeners;
+      showInterval || showTimeout || showRaf || showListeners || showPromise;
 
     return (
       <div className="app">
         <h1>React Memory-Leak Demo</h1>
         <p className="intro">
-          Four class components that each leak on purpose. Everything starts
+          Five class components that each leak on purpose. Everything starts
           unmounted — mount and unmount them (or hit the stress button) while
           watching the JS heap in DevTools. The heap keeps climbing because
           nothing is ever cleaned up.
@@ -93,6 +104,9 @@ class App extends Component<object, State> {
           <button onClick={this.toggle("showListeners")}>
             {showListeners ? "Unmount" : "Mount"} LeakyListeners
           </button>
+          <button onClick={this.toggle("showPromise")}>
+            {showPromise ? "Unmount" : "Mount"} LeakyPromise
+          </button>
           <button className="stress" onClick={this.stress}>
             Mount + unmount all 10×
           </button>
@@ -104,11 +118,12 @@ class App extends Component<object, State> {
           {showTimeout && <LeakyTimeout />}
           {showRaf && <LeakyAnimationFrame />}
           {showListeners && <LeakyListeners />}
+          {showPromise && <LeakyPromise />}
           {!anyMounted && (
             <p className="empty">
               Nothing mounted yet. Mount a component, then unmount it — its
-              timers / listeners / observers / subscriptions stay alive in
-              memory anyway.
+              timers / listeners / observers / subscriptions / in-flight
+              requests stay alive in memory anyway.
             </p>
           )}
         </div>

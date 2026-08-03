@@ -11,7 +11,7 @@ npm run dev      # http://localhost:5173
 npm run build    # type-check + production build
 ```
 
-## What's in it (5 components)
+## What's in it (6 components)
 
 Every leaky child starts **unmounted** — mount them yourself from the UI.
 
@@ -22,6 +22,7 @@ Every leaky child starts **unmounted** — mount them yourself from the UI.
 | `src/components/LeakyTimeout.tsx` | **Yes** | Recursive `setTimeout` never cleared. |
 | `src/components/LeakyAnimationFrame.tsx` | **Yes** | `requestAnimationFrame` loop never cancelled. |
 | `src/components/LeakyListeners.tsx` | **Yes** | Event-listener / observer / subscription leaks. |
+| `src/components/LeakyPromise.tsx` | **Yes** | Slow (>10s) in-flight HTTP request never cancelled. |
 
 ## The intentional leaks
 
@@ -44,6 +45,23 @@ unmount.
 - `document` listener (`visibilitychange`) — never removed
 - `ResizeObserver` / `MutationObserver` / `IntersectionObserver` — never `disconnect()`'d
 - a module-level pub/sub subscription — never unsubscribed
+
+**`LeakyPromise`** — a single simulated HTTP request that takes >10s. Its
+`.then` closes over the component, so while the request is pending the promise
+keeps the instance (and its ~5 MB buffer) reachable. Unmount the component
+before the request resolves and it leaks for the rest of that window; when the
+request finally resolves, the `.then` still runs — it pops an `alert` even
+though the component is gone, which is the classic setState-on-an-unmounted-
+component side effect made visible.
+
+Its fix uses **`makeCancelable`**, vendored into `src/utils/makeCancelable.ts`
+from Happeo's [`@universe/frontend-utils`](https://bitbucket.org/getuniverse/frontend-utils)
+(`src/promise.js`). `cancel()` makes the wrapped promise reject with
+`{ isCanceled: true }` so the component's `.then` never runs after unmount (no
+alert, no setState). (It relies on the request eventually settling — it guards
+the callback, it doesn't abort the socket. A permanently hung request needs an
+`AbortController` instead.) The package lives on a private registry, so the util
+is inlined here to keep the demo self-contained.
 
 Each leaky file has a `teardown()` method containing the exact correct
 cleanup. It's deliberately never called — that's the bug. Rename it to
