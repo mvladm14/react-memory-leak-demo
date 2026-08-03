@@ -27,6 +27,12 @@ class LeakyInterval extends Component<object, State> {
     this.intervalId = setInterval(() => {
       this.leaked.push(this.payload.length + this.leaked.length);
       this.setState((s) => ({ ticks: s.ticks + 1 }));
+      console.log(
+        "LeakyInterval: ticks",
+        this.state.ticks,
+        "leaked",
+        this.leaked.length,
+      );
     }, 500);
   }
 
