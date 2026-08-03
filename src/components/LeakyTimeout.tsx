@@ -1,57 +1,47 @@
-import { Component } from "react";
-
-type State = {
-  ticks: number;
-};
+import { useEffect, useRef, useState } from "react";
 
 /**
  * LeakyTimeout — leaks via a recursive `setTimeout` that reschedules itself
  * forever and is never cleared.
  *
- * Each scheduled callback closes over `this` and queues the next one, so the
- * chain (and the ~5 MB `payload` it captures) keeps the instance alive well
- * after unmount.
+ * The effect returns no cleanup, and each scheduled callback closes over this
+ * component and queues the next one, so the chain (and the ~5 MB `payload` it
+ * captures) keeps the component alive well after unmount.
  */
-class LeakyTimeout extends Component<object, State> {
-  state: State = { ticks: 0 };
+function LeakyTimeout() {
+  const [ticks, setTicks] = useState(0);
 
   // ~5 MB per instance, retained by the pending timeout callback.
-  private payload = new Uint8Array(5_000_000);
+  const payloadRef = useRef<Uint8Array | null>(null);
+  if (payloadRef.current === null) {
+    payloadRef.current = new Uint8Array(5_000_000);
+  }
 
-  private timeoutId?: ReturnType<typeof setTimeout>;
-
-  componentDidMount() {
-    // LEAK: recursive setTimeout, never clearTimeout'd.
+  useEffect(() => {
+    // LEAK: recursive setTimeout, never cleared. Fix: track the latest id and
+    // `return () => clearTimeout(id)` from this effect.
     const schedule = () => {
-      this.timeoutId = setTimeout(() => {
-        void this.payload[0]; // keep the closure retaining the instance
-        this.setState((s) => ({ ticks: s.ticks + 1 }));
+      setTimeout(() => {
+        void payloadRef.current; // keep the closure retaining the component
+        setTicks((t) => t + 1);
         schedule();
       }, 1000);
     };
     schedule();
-  }
+  }, []);
 
-  // THE BUG: no `componentWillUnmount`. This is the exact fix — rename it to
-  // `componentWillUnmount` — but it is deliberately never called.
-  teardown() {
-    clearTimeout(this.timeoutId);
-  }
-
-  render() {
-    return (
-      <div className="leaky-card">
-        <h3>⏳ LeakyTimeout</h3>
-        <p>
-          timeout ticks: <strong>{this.state.ticks}</strong>
-        </p>
-        <p className="leaky-note">
-          Recursive <code>setTimeout</code> that reschedules itself and is never{" "}
-          <code>clearTimeout</code>'d. Holds ~5&nbsp;MB.
-        </p>
-      </div>
-    );
-  }
+  return (
+    <div className="leaky-card">
+      <h3>⏳ LeakyTimeout</h3>
+      <p>
+        timeout ticks: <strong>{ticks}</strong>
+      </p>
+      <p className="leaky-note">
+        Recursive <code>setTimeout</code> that reschedules itself and is never{" "}
+        <code>clearTimeout</code>'d. Holds ~5&nbsp;MB.
+      </p>
+    </div>
+  );
 }
 
 export default LeakyTimeout;

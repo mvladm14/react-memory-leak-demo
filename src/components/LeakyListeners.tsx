@@ -1,105 +1,86 @@
-import { Component, createRef } from "react";
-
-type Props = {
-  label?: string;
-};
-
-type State = {
-  events: number;
-  pings: number;
-};
+import { useEffect, useRef, useState } from "react";
 
 /**
- * LeakyListeners — intentionally leaks memory via event listeners,
- * observers, and a pub/sub subscription.
+ * LeakyListeners — leaks via event listeners, observers, and a pub/sub
+ * subscription.
  *
- * Every listener/observer/subscription below is registered on something that
- * outlives the component (window, document, the observed DOM node, the shared
- * emitter) and closes over `this`. Since none of them are ever removed,
- * disconnected, or unsubscribed, the instance and its ~5 MB `payload` leak on
- * every unmount.
+ * The effect registers everything on things that outlive the component (window,
+ * document, the observed DOM node, the shared emitter) and returns no cleanup.
+ * Every handler closes over this component, so it and its ~5 MB `payload` leak
+ * on every unmount.
  */
-class LeakyListeners extends Component<Props, State> {
-  state: State = { events: 0, pings: 0 };
+function LeakyListeners() {
+  const [events, setEvents] = useState(0);
+  const [pings, setPings] = useState(0);
 
-  // ~5 MB buffer per instance, retained by every handler below.
-  private payload = new Uint8Array(5_000_000);
+  // ~5 MB per instance, retained by every handler below.
+  const payloadRef = useRef<Uint8Array | null>(null);
+  if (payloadRef.current === null) {
+    payloadRef.current = new Uint8Array(5_000_000);
+  }
 
-  private boxRef = createRef<HTMLDivElement>();
-  private resizeObserver?: ResizeObserver;
-  private mutationObserver?: MutationObserver;
-  private intersectionObserver?: IntersectionObserver;
-  private unsubscribe?: () => void;
+  const boxRef = useRef<HTMLDivElement>(null);
 
-  private bump = () => {
-    void this.payload[0]; // keep the closure retaining the instance
-    this.setState((s) => ({ events: s.events + 1 }));
-  };
+  useEffect(() => {
+    const bump = () => {
+      void payloadRef.current; // keep the closure retaining the component
+      setEvents((e) => e + 1);
+    };
 
-  componentDidMount() {
     // LEAK 1: window/document event listeners — never removed.
-    window.addEventListener("resize", this.bump);
-    window.addEventListener("scroll", this.bump);
-    window.addEventListener("mousemove", this.bump);
-    document.addEventListener("visibilitychange", this.bump);
+    window.addEventListener("resize", bump);
+    window.addEventListener("scroll", bump);
+    window.addEventListener("mousemove", bump);
+    document.addEventListener("visibilitychange", bump);
 
     // LEAK 2: observers on a DOM node — never disconnected.
-    const node = this.boxRef.current;
+    const node = boxRef.current;
+    const resizeObserver = new ResizeObserver(bump);
+    const mutationObserver = new MutationObserver(bump);
+    const intersectionObserver = new IntersectionObserver(bump);
     if (node) {
-      this.resizeObserver = new ResizeObserver(this.bump);
-      this.resizeObserver.observe(node);
-
-      this.mutationObserver = new MutationObserver(this.bump);
-      this.mutationObserver.observe(node, { childList: true, subtree: true });
-
-      this.intersectionObserver = new IntersectionObserver(this.bump);
-      this.intersectionObserver.observe(node);
+      resizeObserver.observe(node);
+      mutationObserver.observe(node, { childList: true, subtree: true });
+      intersectionObserver.observe(node);
     }
 
-    // LEAK 3: pub/sub subscription — never unsubscribed. `subscribe` returns
-    // an unsubscribe fn we simply throw away.
-    this.unsubscribe = emitter.subscribe(() => {
-      void this.payload[0];
-      this.setState((s) => ({ pings: s.pings + 1 }));
+    // LEAK 3: pub/sub subscription — the unsubscribe fn is thrown away.
+    emitter.subscribe(() => {
+      void payloadRef.current;
+      setPings((p) => p + 1);
     });
 
-    // Emit periodically so subscribers stay "warm" — this interval is also
-    // never cleared, but the point here is the retained subscription list.
+    // Emit periodically so subscribers stay "warm".
     startEmitting();
-  }
 
-  // ---------------------------------------------------------------------------
-  // THE BUG: there is deliberately NO `componentWillUnmount`. The method below
-  // is exactly what it should be — but it is never called anywhere, so nothing
-  // is ever removed/disconnected/unsubscribed. To fix every leak in this file,
-  // simply rename `teardown` to `componentWillUnmount`.
-  // ---------------------------------------------------------------------------
-  teardown() {
-    window.removeEventListener("resize", this.bump);
-    window.removeEventListener("scroll", this.bump);
-    window.removeEventListener("mousemove", this.bump);
-    document.removeEventListener("visibilitychange", this.bump);
-    this.resizeObserver?.disconnect();
-    this.mutationObserver?.disconnect();
-    this.intersectionObserver?.disconnect();
-    this.unsubscribe?.();
-  }
+    // THE BUG: this effect returns no cleanup. The fix is to return one that
+    // undoes everything above — deliberately omitted so it all leaks:
+    //
+    //   return () => {
+    //     window.removeEventListener("resize", bump);
+    //     window.removeEventListener("scroll", bump);
+    //     window.removeEventListener("mousemove", bump);
+    //     document.removeEventListener("visibilitychange", bump);
+    //     resizeObserver.disconnect();
+    //     mutationObserver.disconnect();
+    //     intersectionObserver.disconnect();
+    //     // ...and call the unsubscribe returned by emitter.subscribe(...).
+    //   };
+  }, []);
 
-  render() {
-    return (
-      <div className="leaky-card" ref={this.boxRef}>
-        <h3>📡 LeakyListeners {this.props.label ?? ""}</h3>
-        <p>
-          dom/window events: <strong>{this.state.events}</strong> · emitter
-          pings: <strong>{this.state.pings}</strong>
-        </p>
-        <p className="leaky-note">
-          window + document listeners, Resize/Mutation/Intersection observers,
-          and a pub/sub subscription — none ever removed. Holds ~5&nbsp;MB.
-        </p>
-      </div>
-    );
-  }
+  return (
+    <div className="leaky-card" ref={boxRef}>
+      <h3>📡 LeakyListeners</h3>
+      <p>
+        dom/window events: <strong>{events}</strong> · emitter pings:{" "}
+        <strong>{pings}</strong>
+      </p>
+      <p className="leaky-note">
+        window + document listeners, Resize/Mutation/Intersection observers, and
+        a pub/sub subscription — none ever removed. Holds ~5&nbsp;MB.
+      </p>
+    </div>
+  );
 }
 
 export default LeakyListeners;

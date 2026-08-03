@@ -1,9 +1,8 @@
 # react-leak-demo
 
 A deliberately leaky React app. Vite + **React 18** + TypeScript, written with
-**class components** (recent enough to migrate to functional components/hooks
-later). It exists to be leaked on purpose so memory-leak tooling has something
-to catch.
+**functional components and hooks**. It exists to be leaked on purpose so
+memory-leak tooling has something to catch.
 
 ```bash
 npm install
@@ -26,12 +25,12 @@ Every leaky child starts **unmounted** — mount them yourself from the UI.
 
 ## The intentional leaks
 
-Every leak follows the same pattern: a callback is registered on something that
-outlives the component (a timer queue, `window`, `document`, an observed DOM
-node, a shared emitter) and that callback closes over `this`. The component
-**never runs `componentWillUnmount`**, so nothing is torn down — the instance
-and the ~5 MB `Uint8Array` it holds can never be garbage-collected after
-unmount.
+Every leak follows the same pattern: inside a `useEffect(… , [])` a callback is
+registered on something that outlives the component (a timer queue, `window`,
+`document`, an observed DOM node, a shared emitter, a pending promise), and that
+callback closes over the component's refs/state setters. The effect **returns no
+cleanup function**, so on unmount React has nothing to tear down — the component
+and the ~5 MB `Uint8Array` it holds can never be garbage-collected.
 
 **`LeakyInterval`** — `setInterval`, never `clearInterval`'d
 
@@ -63,9 +62,9 @@ the callback, it doesn't abort the socket. A permanently hung request needs an
 `AbortController` instead.) The package lives on a private registry, so the util
 is inlined here to keep the demo self-contained.
 
-Each leaky file has a `teardown()` method containing the exact correct
-cleanup. It's deliberately never called — that's the bug. Rename it to
-`componentWillUnmount` to fix that component's leak.
+Each leaky file's `useEffect` shows the exact fix as a commented-out
+`return () => { … }` cleanup. Uncommenting it (and capturing the timer id where
+noted) makes React run the cleanup on unmount and fixes that component's leak.
 
 ## How to see the leak
 
@@ -80,7 +79,8 @@ Other views: **Performance monitor** (watch *JS heap size* climb) and
 **Rendering → detached elements** (the observer-held DOM nodes).
 
 > **Note on StrictMode:** `main.tsx` keeps `<React.StrictMode>`. In React 18 dev
-> mode it intentionally mounts → unmounts → remounts each component once, so the
-> very first mount already leaks an extra instance. That's expected here and
-> actually helps demonstrate the missing cleanup. Production builds don't
-> double-mount, but the leaks still happen on every real unmount.
+> mode it intentionally runs each effect twice (setup → cleanup → setup). Since
+> these effects return no cleanup, the setup simply runs twice, so a single
+> mount already leaks an extra set of timers/listeners/requests. That's expected
+> here and actually helps demonstrate the missing cleanup. Production builds run
+> effects once, but the leaks still happen on every real unmount.
